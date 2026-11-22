@@ -165,4 +165,4 @@ docs/assets/            # 截图
 
 ## 许可
 
-暂未添加 LICENSE 文件。对外分发或接受贡献前，请先选定许可证（MIT 是常见默认选项）。
+MIT，见 [LICENSE](LICENSE)。Copyright (c) 2026 Alaneve541。

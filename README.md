@@ -172,5 +172,4 @@ instead of faking automation.
 
 ## License
 
-No license file yet. Pick one (MIT is a common default) before redistributing or accepting
-contributions.
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Alaneve541.
