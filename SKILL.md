@@ -121,7 +121,7 @@ node "<skill 目录>/scripts/detect-engine.mjs" "<项目或工作目录>"
 - 以「代码写完了」代替「跑起来截到图了」。
 - 静默安装引擎或改动用户工程配置。
 
-## 能力边界（v2）
+## 自动化覆盖（原「局限」项）
 
 | 领域 | 现在怎么自动化 | 仍需人工的部分 |
 |---|---|---|
@@ -130,14 +130,7 @@ node "<skill 目录>/scripts/detect-engine.mjs" "<项目或工作目录>"
 | 发布 | `publish.mjs`：butler、steamcmd、Web 打包/部署、微信 CLI、Gradle/Fastlane、Xcode archive | 首次登录、2FA、商店审核提交 |
 | 平衡与手感 | `balance-sweep.mjs`：种子批量跑、CSV、胜率/存活/分位数 | 最终主观打磨 |
 
-遇到「仍需人工」的四类事，不要假装自动化、也不要跳过：把具体待办、要跑的命令、预期产物写清楚交给用户，等用户完成后继续。典型交接话术：
-
-- 「请在 Unity Hub 登录并激活许可证（个人版即可），完成后我继续跑 BuildScript。」
-- 「Unreal 安装包 30–80 GB，需要你确认磁盘与网络；装好后我跑完整性检查。」
-- 「itch/Steam 首次登录与 2FA 需要你本人操作，登录态存好后我再 `publish.mjs --apply`。」
-- 「数值已到基线，最后的手感/美术取舍需要你试玩拍板。」
-
-证据：`templates/{blender,ue,unity,godot}`；`balance-sweep` 对模板 20 种子出 CSV 基线；`prepare-engine` / `publish` 默认 dry-run，先打印可复现命令。
+真正无法自动化的只剩五类：美术方向决策、Unity 许可证激活、Unreal 30–80 GB 安装包、首次登录/2FA 与商店审核、最终主观打磨。其余都是命令。遇到这五类卡点时，把要跑的命令和预期产物写清楚交还用户，不要假装自动化。
 
 ## 参考文件
 
