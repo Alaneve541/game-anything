@@ -90,6 +90,7 @@ node scripts/verify-web.mjs \
 | `scripts/detect-engine.mjs` | 扫描工程目录与本机：引擎评分、安装完整性（如 Unreal 缺 `Engine/Binaries/Win64`）、工具链（Node、.NET、浏览器）与下一步建议。 |
 | `scripts/verify-web.mjs` | 基于 DevTools 协议的无头 Edge/Chrome：等探针、收集 console/page 错误、注入按键/点击、执行 JS、截图，出错时返回非 0。 |
 | `scripts/serve.mjs` | 零依赖静态服务器（MIME 表、防目录穿越、SPA 回退）。 |
+| `scripts/sync-github.mjs` | 当 `github.com:443` 不可达时，用 GitHub Git Data API 把已提交内容推到远端；默认 dry-run，`--apply` 生成一个 commit。 |
 | `scripts/prepare-engine.mjs` | 把"引擎没装"变成可执行步骤：Godot 自动下载解压并自检（`--headless --version`）；Unity Hub 静默安装（编辑器与许可证需一步人工/CI）；Unreal 检查 `Engine/Binaries/Win64` 是否完整。默认 dry-run，`--apply` 才安装。 |
 | `scripts/balance-sweep.mjs` | 无头批量跑种子对局（浏览器探针或 DOM 无关的 core 模块），输出 CSV，统计胜率、平均存活与分数分位数——数值是量出来的，不是猜的。 |
 | `scripts/publish.mjs` | 统一发布入口：itch.io（butler）、Steam（steamcmd + SteamPipe VDF）、Web 打包/部署、微信小游戏 CLI、Gradle/Fastlane、Xcode archive。默认 dry-run，`--apply` 才执行；密钥走环境变量并在日志中脱敏。 |

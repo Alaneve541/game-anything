@@ -164,6 +164,21 @@ VERSION="$(git describe --tags --always)"
 - Web：Cloudflare/Netlify 一键回滚到上一个 deploy。
 - 小游戏：后台回退版本（有审核延迟）。
 
+## 6.5) 代码托管（GitHub）：git 协议被墙时的推送
+
+国内网络常见 `github.com:443` 连不上（`Recv failure: Connection was reset`），但 `api.github.com` 正常。
+此时 `git push` 必然失败，用 API 通道同步已提交内容：
+
+```bash
+node scripts/sync-github.mjs                       # dry-run：对比本地 commit 与远端树
+node scripts/sync-github.mjs --apply              # 生成一个 commit 并更新分支
+node scripts/sync-github.mjs --apply --message "fix: …"
+```
+
+- 认证：`gh auth login` 后自动取 token，或设 `GITHUB_TOKEN`；`GH_BIN` 可指定 gh 路径。
+- 只同步 git 跟踪的文件，内容取自 index blob（不受 CRLF 影响），要求工作区干净。
+- 网络恢复后本地对账一次即可：`git fetch origin && git reset --hard origin/main`。
+
 ## 7) 安全
 
 - 密钥只走环境变量 / CI secrets，禁止写进仓库或 VDF。
