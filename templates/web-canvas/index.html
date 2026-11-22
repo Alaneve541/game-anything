@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>Orb Runner — game-anything 模板</title>
+<link rel="icon" href="data:," />
+<style>
+  html, body {
+    margin: 0; height: 100%; background: #0b0d14; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font-family: ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+    touch-action: none; user-select: none;
+  }
+  canvas { display: block; box-shadow: 0 0 0 1px #1d2436, 0 24px 80px rgba(0,0,0,.6); border-radius: 6px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const W = 960, H = 540, STEP = 1 / 60;
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const keys = new Set();
+
+  // ---------- 工具 ----------
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const dist2 = (ax, ay, bx, by) => (ax - bx) ** 2 + (ay - by) ** 2;
+
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---------- 存档 ----------
+  const SAVE_KEY = "game-anything.orb-runner.v1";
+  function loadBest() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      const data = raw ? JSON.parse(raw) : null;
+      return data && typeof data.best === "number" ? data.best : 0;
+    } catch { return 0; }
+  }
+  function saveBest(best) {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, best })); } catch { /* 无痕模式可能失败 */ }
+  }
+
+  // ---------- 音频（手势解锁）----------
+  let ac = null;
+  function unlockAudio() {
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === "suspended") ac.resume();
+    } catch { /* 无音频也能玩 */ }
+  }
+  function blip(freq, dur = 0.08, type = "square", gain = 0.05) {
+    if (!ac || ac.state !== "running") return;
+    const t = ac.currentTime;
+    const osc = ac.createOscillator();
+    const g = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, freq * 0.6), t + dur);
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(ac.destination);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  }
+
+  // ---------- 游戏状态 ----------
+  const S = {
+    t: 0, score: 0, hp: 3, invuln: 0, mode: "playing", paused: false,
+    seed: 0, rng: mulberry32(1), nextId: 1,
+    player: { x: W / 2, y: H / 2, r: 14 },
+    orbs: [], hunters: [],
+    spawnOrb: 0.4, spawnHunter: 2.5,
+    shake: 0, best: loadBest(),
+  };
+
+  function spawnOrb() {
+    const rng = S.rng;
+    let x = 0, y = 0;
+    for (let i = 0; i < 20; i++) {
+      x = 40 + rng() * (W - 80);
+      y = 60 + rng() * (H - 120);
+      if (dist2(x, y, S.player.x, S.player.y) > 130 ** 2) break;
+    }
+    S.orbs.push({ id: S.nextId++, x, y, r: 9, born: S.t });
+  }
+
+  function spawnHunter() {
+    const rng = S.rng;
+    const edge = Math.floor(rng() * 4);
+    let x = 0, y = 0;
+    if (edge === 0) { x = -20; y = rng() * H; }
+    else if (edge === 1) { x = W + 20; y = rng() * H; }
+    else if (edge === 2) { x = rng() * W; y = -20; }
+    else { x = rng() * W; y = H + 20; }
+    S.hunters.push({ id: S.nextId++, x, y, r: 13, speed: 78 + Math.min(S.t * 0.9, 70) });
+  }
+
+  function reset(seed) {
+    S.seed = (seed === undefined ? (Date.now() >>> 0) : seed) >>> 0;
+    S.rng = mulberry32(S.seed);
+    S.t = 0; S.score = 0; S.hp = 3; S.invuln = 0;
+    S.mode = "playing"; S.paused = false; S.shake = 0;
+    S.orbs = []; S.hunters = []; S.spawnOrb = 0.4; S.spawnHunter = 2.5;
+    S.player.x = W / 2; S.player.y = H / 2;
+    for (let i = 0; i < 3; i++) spawnOrb();
+  }
+
+  function gameOver() {
+    S.mode = "over";
+    if (S.score > S.best) { S.best = S.score; saveBest(S.best); }
+    blip(110, 0.35, "sawtooth", 0.07);
+  }
+
+  function readIntent() {
+    let x = 0, y = 0;
+    if (keys.has("KeyA") || keys.has("ArrowLeft")) x -= 1;
+    if (keys.has("KeyD") || keys.has("ArrowRight")) x += 1;
+    if (keys.has("KeyW") || keys.has("ArrowUp")) y -= 1;
+    if (keys.has("KeyS") || keys.has("ArrowDown")) y += 1;
+    const len = Math.hypot(x, y) || 1;
+    return { x: x / len, y: y / len, moving: x !== 0 || y !== 0 };
+  }
+
+  function step(dt) {
+    S.t += dt;
+    if (S.mode !== "playing") return;
+
+    const p = S.player;
+    const intent = readIntent();
+    const SPEED = 285;
+    p.x = clamp(p.x + intent.x * SPEED * dt, p.r, W - p.r);
+    p.y = clamp(p.y + intent.y * SPEED * dt, p.r + 28, H - p.r);
+
+    if (S.invuln > 0) S.invuln = Math.max(0, S.invuln - dt);
+    if (S.shake > 0) S.shake = Math.max(0, S.shake - dt);
+
+    // 生成
+    S.spawnOrb -= dt;
+    if (S.spawnOrb <= 0 && S.orbs.length < 12) { spawnOrb(); S.spawnOrb = Math.max(0.55, 1.1 - S.t * 0.01); }
+    else if (S.spawnOrb <= 0) S.spawnOrb = 0.4;
+    S.spawnHunter -= dt;
+    if (S.spawnHunter <= 0 && S.hunters.length < 9) { spawnHunter(); S.spawnHunter = Math.max(1.6, 4.2 - S.t * 0.03); }
+
+    // 光球碰撞
+    for (let i = S.orbs.length - 1; i >= 0; i--) {
+      const o = S.orbs[i];
+      if (dist2(o.x, o.y, p.x, p.y) < (o.r + p.r) ** 2) {
+        S.orbs.splice(i, 1);
+        S.score += 10;
+        blip(760 + Math.min(S.score, 400), 0.07, "triangle", 0.045);
+      }
+    }
+
+    // 猎手移动与碰撞
+    for (let i = S.hunters.length - 1; i >= 0; i--) {
+      const h = S.hunters[i];
+      const dx = p.x - h.x, dy = p.y - h.y;
+      const d = Math.hypot(dx, dy) || 1;
+      h.x += (dx / d) * h.speed * dt;
+      h.y += (dy / d) * h.speed * dt;
+      if (d < h.r + p.r && S.invuln <= 0) {
+        S.hunters.splice(i, 1);
+        S.hp -= 1;
+        S.invuln = 1.2;
+        S.shake = 0.3;
+        blip(150, 0.2, "sawtooth", 0.08);
+        if (S.hp <= 0) gameOver();
+      }
+    }
+  }
+
+  // ---------- 渲染 ----------
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  function resize() {
+    const pad = 24;
+    const s = Math.min((innerWidth - pad) / W, (innerHeight - pad) / H);
+    canvas.style.width = `${Math.max(320, W * s)}px`;
+    canvas.style.height = `${Math.max(180, H * s)}px`;
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  function draw() {
+    const shake = S.shake > 0 ? (Math.random() - 0.5) * 8 * (S.shake / 0.3) : 0;
+    ctx.save();
+    ctx.translate(shake, shake);
+
+    // 背景
+    ctx.fillStyle = "#0b0d14";
+    ctx.fillRect(-10, -10, W + 20, H + 20);
+    ctx.strokeStyle = "rgba(90,120,200,0.07)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 40; x < W; x += 40) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+    for (let y = 40; y < H; y += 40) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+    ctx.stroke();
+
+    // 光球
+    for (const o of S.orbs) {
+      const pulse = 1 + Math.sin((S.t - o.born) * 4 + o.id) * 0.12;
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(80,220,255,0.16)";
+      ctx.arc(o.x, o.y, o.r * 2.1 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = "#5fe6ff";
+      ctx.arc(o.x, o.y, o.r * pulse, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 猎手（朝玩家方向的三角）
+    for (const h of S.hunters) {
+      const a = Math.atan2(S.player.y - h.y, S.player.x - h.x);
+      ctx.save();
+      ctx.translate(h.x, h.y);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(h.r + 4, 0);
+      ctx.lineTo(-h.r * 0.8, h.r * 0.85);
+      ctx.lineTo(-h.r * 0.8, -h.r * 0.85);
+      ctx.closePath();
+      ctx.fillStyle = "#ff5d6c";
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 玩家
+    const p = S.player;
+    const blinking = S.invuln > 0 && Math.floor(S.invuln * 12) % 2 === 0;
+    ctx.beginPath();
+    ctx.fillStyle = "rgba(120,255,180,0.14)";
+    ctx.arc(p.x, p.y, p.r * 2, 0, Math.PI * 2);
+    ctx.fill();
+    if (!blinking) {
+      ctx.beginPath();
+      ctx.fillStyle = "#8dffc0";
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = "#0b0d14";
+      ctx.arc(p.x + 4, p.y - 3, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // HUD
+    ctx.font = "600 20px ui-sans-serif, system-ui, sans-serif";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#e8eefc";
+    ctx.fillText(`得分 ${S.score}`, 24, 20);
+    ctx.fillStyle = "#8b9bb8";
+    ctx.font = "500 16px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText(`最佳 ${S.best}   时间 ${S.t.toFixed(1)}s`, 24, 48);
+
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i < S.hp ? "#ff7b8a" : "rgba(255,123,138,0.18)";
+      ctx.fillRect(W - 40 - i * 26, 22, 16, 16);
+    }
+
+    if (S.paused) overlay("已暂停", "按 Esc 继续");
+    if (S.mode === "over") overlay("游戏结束", `得分 ${S.score} · 按 R 重开`);
+    if (S.mode === "playing" && S.t < 4) {
+      ctx.fillStyle = "rgba(200,215,240,0.45)";
+      ctx.font = "500 15px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("WASD / 方向键移动 · 收集青色光球 · 躲开红色猎手", W / 2, H - 40);
+      ctx.textAlign = "left";
+    }
+  }
+
+  function overlay(title, sub) {
+    ctx.fillStyle = "rgba(6,8,14,0.72)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#e8eefc";
+    ctx.font = "700 46px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText(title, W / 2, H / 2 - 50);
+    ctx.fillStyle = "#9fb0cc";
+    ctx.font = "500 20px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText(sub, W / 2, H / 2 + 14);
+    ctx.textAlign = "left";
+  }
+
+  // ---------- 主循环（固定步长）----------
+  let acc = 0;
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.25);
+    last = now;
+    if (!S.paused) {
+      acc += dt;
+      let guard = 0;
+      while (acc >= STEP && guard++ < 8) { step(STEP); acc -= STEP; }
+    } else {
+      acc = 0;
+    }
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- 输入 ----------
+  const GAME_KEYS = new Set([
+    "KeyW", "KeyA", "KeyS", "KeyD",
+    "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+    "Space", "Escape", "KeyR",
+  ]);
+
+  addEventListener("keydown", (e) => {
+    if (GAME_KEYS.has(e.code)) e.preventDefault();
+    unlockAudio();
+    keys.add(e.code);
+    if (e.code === "Escape" && S.mode === "playing") S.paused = !S.paused;
+    if (e.code === "KeyR" && S.mode === "over") reset();
+  });
+  addEventListener("keyup", (e) => keys.delete(e.code));
+  addEventListener("blur", () => { keys.clear(); acc = 0; last = performance.now(); });
+  addEventListener("pointerdown", unlockAudio, { once: true });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { keys.clear(); }
+    last = performance.now(); acc = 0;
+  });
+
+  // ---------- 自动化探针 ----------
+  window.__game = {
+    ready: true,
+    state() {
+      return {
+        t: Number(S.t.toFixed(2)),
+        score: S.score,
+        hp: S.hp,
+        mode: S.mode,
+        paused: S.paused,
+        best: S.best,
+        seed: S.seed,
+        orbs: S.orbs.length,
+        hunters: S.hunters.length,
+        player: { x: Math.round(S.player.x), y: Math.round(S.player.y) },
+      };
+    },
+    press(code, ms = 200) {
+      keys.add(code);
+      setTimeout(() => keys.delete(code), ms);
+    },
+    reset(seed) { reset(seed); },
+    simulate(seconds) {
+      const n = Math.max(1, Math.round(seconds / STEP));
+      for (let i = 0; i < n; i++) step(STEP);
+      draw();
+    },
+  };
+
+  reset(20260101);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

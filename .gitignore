@@ -1,0 +1,21 @@
+node_modules/
+.pnpm-store/
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+
+# local verification artifacts
+shot*.png
+t1.png
+t2.png
+t3.png
+t4.png
+t6.png
+report.json
+trial-*.png
+trial-report.json
+
+# keep documentation screenshots
+!docs/assets/*.png
