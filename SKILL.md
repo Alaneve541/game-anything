@@ -123,14 +123,21 @@ node "<skill 目录>/scripts/detect-engine.mjs" "<项目或工作目录>"
 
 ## 能力边界（v2）
 
-| 之前的"局限" | 现在的做法 | 证据 |
+| 领域 | 现在怎么自动化 | 仍需人工的部分 |
 |---|---|---|
-| 模型/关卡仍需编辑器手动生成 | Blender headless 出模型；UE Python / Unity Editor / Godot tool script 生成场景与预制体；纯数据关卡直接生成 JSON | `templates/blender|ue|unity|godot`，语法与接口按官方 API 编写 |
-| 引擎命令只是"参考"，不能替代已安装引擎 | `prepare-engine.mjs` 可脚本化补齐（Godot 全自动；Unity Hub 静默装，编辑器/许可证一步人工；UE 检测完整性） | 引擎装好后 `detect-engine.mjs` + 各引擎构建命令实测 |
-| 商店发布只能列清单 | `publish.mjs` 统一入口：itch（butler）、Steam（steamcmd）、Web 打包、微信 CLI、Android/iOS 构建；默认 dry-run | `publish.mjs --dry-run` 输出可复现命令 |
-| 手感/数值只能人工迭代 | `balance-sweep.mjs` 批量种子对局 + CSV + 胜率/分位统计；参数扫描 | 对模板跑 20 seed 得到基线 |
+| 模型 / 关卡 / Prefab | Blender headless；UE Python、Unity Editor、Godot 工具脚本；JSON 关卡数据 | 美术方向决策 |
+| 引擎准备 | `prepare-engine.mjs`：Godot 全自动；Unity Hub 静默安装；Unreal 完整性检查 | Unity 许可证激活；Unreal 30–80 GB 安装包 |
+| 发布 | `publish.mjs`：butler、steamcmd、Web 打包/部署、微信 CLI、Gradle/Fastlane、Xcode archive | 首次登录、2FA、商店审核提交 |
+| 平衡与手感 | `balance-sweep.mjs`：种子批量跑、CSV、胜率/存活/分位数 | 最终主观打磨 |
 
-仍然"不能"的只有：绕过平台审核、免登录发布、无引擎二进制凭空构建。这三件事没有任何工具能自动化。
+遇到「仍需人工」的四类事，不要假装自动化、也不要跳过：把具体待办、要跑的命令、预期产物写清楚交给用户，等用户完成后继续。典型交接话术：
+
+- 「请在 Unity Hub 登录并激活许可证（个人版即可），完成后我继续跑 BuildScript。」
+- 「Unreal 安装包 30–80 GB，需要你确认磁盘与网络；装好后我跑完整性检查。」
+- 「itch/Steam 首次登录与 2FA 需要你本人操作，登录态存好后我再 `publish.mjs --apply`。」
+- 「数值已到基线，最后的手感/美术取舍需要你试玩拍板。」
+
+证据：`templates/{blender,ue,unity,godot}`；`balance-sweep` 对模板 20 种子出 CSV 基线；`prepare-engine` / `publish` 默认 dry-run，先打印可复现命令。
 
 ## 参考文件
 

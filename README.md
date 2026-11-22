@@ -165,8 +165,10 @@ docs/assets/            # screenshots
 | Publishing | `publish.mjs`: butler, steamcmd, web zip/deploy, WeChat CLI, Gradle/Fastlane, Xcode archive | First login, 2FA, store review submission |
 | Balance & feel | `balance-sweep.mjs`: seeded batch runs, CSV, win rate / survival / score percentiles | Final subjective polish |
 
-The only genuinely non-automatable parts are platform review, account login/2FA, and building without
-an installed engine binary. Everything else is a command.
+The only genuinely non-automatable parts are art-direction calls, Unity license activation, the Unreal
+30–80 GB installer, first login/2FA and store review, and the final subjective polish. Everything else is a
+command. When one of these blocks the loop, hand it back with the exact command and expected artifact
+instead of faking automation.
 
 ## License
 
