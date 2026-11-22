@@ -22,8 +22,9 @@ Cocos Creator、Construct、RPG Maker，Web 引擎（Canvas / Phaser / Three.js�
 四条硬规则：
 
 1. **能跑 > 完整**：先交 5 分钟可玩的垂直切片，功能往后放。
-2. **绝不手写二进制引擎资产**（`.uasset`、`.umap`、`.unity`、`.meta`、`.prefab`）：
-   要么走引擎 API 生成，要么只改文本格式。
+2. **资产由工具与引擎 API 生成，绝不手写二进制字节**：模型走 Blender headless 或程序化网格；
+   关卡、Prefab 与场景由 UE Python / Unity Editor 脚本 / Godot 工具脚本生成，或来自 JSON 关卡数据。
+   `.uasset`、`.umap`、`.unity`、`.yy` 永远不用文本编辑器碰。
 3. **只报告验证过的结果**：最终报告里不出现 "应该能跑"。
 4. **先手感后画面**：操作延迟、反馈、节奏优先于美术打磨。
 
@@ -89,6 +90,9 @@ node scripts/verify-web.mjs \
 | `scripts/detect-engine.mjs` | 扫描工程目录与本机：引擎评分、安装完整性（如 Unreal 缺 `Engine/Binaries/Win64`）、工具链（Node、.NET、浏览器）与下一步建议。 |
 | `scripts/verify-web.mjs` | 基于 DevTools 协议的无头 Edge/Chrome：等探针、收集 console/page 错误、注入按键/点击、执行 JS、截图，出错时返回非 0。 |
 | `scripts/serve.mjs` | 零依赖静态服务器（MIME 表、防目录穿越、SPA 回退）。 |
+| `scripts/prepare-engine.mjs` | 把"引擎没装"变成可执行步骤：Godot 自动下载解压并自检（`--headless --version`）；Unity Hub 静默安装（编辑器与许可证需一步人工/CI）；Unreal 检查 `Engine/Binaries/Win64` 是否完整。默认 dry-run，`--apply` 才安装。 |
+| `scripts/balance-sweep.mjs` | 无头批量跑种子对局（浏览器探针或 DOM 无关的 core 模块），输出 CSV，统计胜率、平均存活与分数分位数——数值是量出来的，不是猜的。 |
+| `scripts/publish.mjs` | 统一发布入口：itch.io（butler）、Steam（steamcmd + SteamPipe VDF）、Web 打包/部署、微信小游戏 CLI、Gradle/Fastlane、Xcode archive。默认 dry-run，`--apply` 才执行；密钥走环境变量并在日志中脱敏。 |
 
 `verify-web.mjs` 常用参数：
 
@@ -118,26 +122,45 @@ window.__game = {
 | 代码优先配方 | Bevy、MonoGame、LÖVE、pygame、Raylib、LibGDX、HaxeFlixel、Ebitengine | 每个引擎都有最小可运行代码，无需编辑器 |
 | 无自动化 | Construct 3 | 只能手动导出 `.c3p`，无脚本化 CLI |
 
-如果目标引擎缺失，skill 会**主动降级**：先用 Web 原型验证手感、把核心逻辑写成纯函数并做确定性
-测试、给出移植清单——而不是假装构建成功了。
+如果目标引擎缺失，skill 不会停在"你自己去装"：`prepare-engine.mjs` 能全自动装好 Godot（便携
+zip）、静默安装 Unity Hub、并精确报告 Unreal 缺哪个二进制。之后才降级为 Web 原型 + 移植清单——
+并且绝不会在引擎构建没跑通时声称成功。
+
+## 内容与数值同样脚本化
+
+- `templates/blender/gen_props.py` —— Blender headless：生成道具、材质，导出 GLB/FBX。
+- `templates/ue/gen_assets.py` —— UE 编辑器 Python：导入模型、摆放 actor、保存关卡。
+- `templates/unity/Editor/BuildTools.cs` —— Unity `-executeMethod`：程序化网格、Prefab、场景。
+- `templates/godot/tools/gen_content.gd` —— Godot 工具脚本：`ArrayMesh` → `.tres`、`.tscn` 场景。
+- `node scripts/balance-sweep.mjs --url http://127.0.0.1:8123 --seeds 1-100 --seconds 90` ——
+  批量跑、出 CSV、汇总胜率/存活/分位数；`--core dist/core.mjs` 可跑更快的纯逻辑扫描。
 
 ## 仓库结构
 
 ```
 SKILL.md                # agent 加载的技能正文（中文，权威版本）
-references/             # 12 篇深水区文档：引擎、架构、验证、素材、发布
-scripts/                # detect-engine.mjs、verify-web.mjs、serve.mjs
+references/             # 15 篇深水区文档：引擎、架构、素材流水线、平衡实验室、
+                        # 验证、发布自动化、素材与音频、平台发布
+scripts/                # detect-engine、prepare-engine、verify-web、balance-sweep、publish、serve
 templates/web-canvas/   # 可运行 Canvas 游戏，含探针、存档、音效
+templates/blender/      # Blender headless 道具生成（GLB/FBX）
+templates/ue/           # Unreal 编辑器 Python 资产 + 关卡生成
+templates/unity/        # Unity 编辑器批量内容生成
+templates/godot/        # Godot 工具脚本内容生成
 docs/en/quickstart.md   # 英文快速上手
 docs/assets/            # 截图
 ```
 
-## 局限
+## 自动化覆盖（原「局限」项）
 
-- 不手写二进制引擎资产；模型、关卡等内容仍需引擎编辑器或 API 生成。
-- 引擎相关命令是"验证过的参考"，不能替代已安装的引擎。
-- 商店发布是清单而非自动化（Steam/itch/微信小游戏后台仍需手动操作）。
-- 手感与数值平衡需要迭代；skill 保证的是"可运行、可验证"的基线。
+| 领域 | 现在怎么自动化 | 仍需人工的部分 |
+|---|---|---|
+| 模型 / 关卡 / Prefab | Blender headless；UE Python、Unity Editor、Godot 工具脚本；JSON 关卡数据 | 美术方向决策 |
+| 引擎准备 | `prepare-engine.mjs`：Godot 全自动；Unity Hub 静默安装；Unreal 完整性检查 | Unity 许可证激活；Unreal 30–80 GB 安装包 |
+| 发布 | `publish.mjs`：butler、steamcmd、Web 打包/部署、微信 CLI、Gradle/Fastlane、Xcode archive | 首次登录、2FA、商店审核提交 |
+| 平衡与手感 | `balance-sweep.mjs`：种子批量跑、CSV、胜率/存活/分位数 | 最终主观打磨 |
+
+真正无法自动化的只剩：平台审核、账号登录/2FA、以及没有引擎二进制时凭空构建。其余都是命令。
 
 ## 许可
 

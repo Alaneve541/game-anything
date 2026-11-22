@@ -2,7 +2,7 @@
 name: game-anything
 description: 游戏开发技能（Craft Games）：从一句话创意到可运行游戏。先探测目标引擎与本机已安装工具链，再按引擎路由——Unity、Unreal、Godot、GameMaker、Cocos Creator、Construct、RPG Maker、Phaser/Three.js 等 Web 引擎、Bevy/MonoGame/LÖVE/pygame 等代码引擎、Roblox/Minecraft 等托管平台。含脚手架、引擎无关核心架构、无头构建与截图验证、素材/音频、打包发布。当用户要做游戏、加玩法、选引擎、移植、复刻某款游戏或把游戏发到某平台时使用。
 metadata:
-  version: "1"
+  version: "2"
 ---
 
 # Game Anything
@@ -18,7 +18,7 @@ metadata:
 ## 四条硬规则
 
 1. **可运行 > 完整**。每个阶段结束都要有能启动的构建；没有可运行产物的进度不算进度。
-2. **不手写引擎私有或二进制资产**。`.uasset`/`.umap`、带 GUID 的 Unity `.unity`/`.prefab`、GameMaker `.yy`、Cocos `.prefab` 这类文件用引擎 API、编辑器脚本或代码生成，或改用文本格式。手改一次就可能让工程打不开。
+2. **资产由脚本生成，不手写二进制字节**。模型用 Blender headless 或程序化网格生成；关卡、预制体、场景用引擎编辑器 API（UE Python / Unity Editor / Godot tool script）或 JSON 数据生成后导入；`.uasset`/`.umap`/`.unity`/`.yy` 永远不让文本编辑器碰。见[资产生成](references/asset-pipeline.md)。
 3. **只报告验证过的**。命令输出、日志、测试报告、截图才算证据；引擎缺失或安装不完整要直说，不静默下载几十 GB，也不把「编译通过」当「能玩」。
 4. **先手感后画面**。占位方块和程序化图形先行，美术与音频后置；没有核心循环之前不做菜单、存档、设置。
 
@@ -32,7 +32,7 @@ node "<skill 目录>/scripts/detect-engine.mjs" "<项目或工作目录>"
 
 - 已有工程：跟随它的引擎与版本，不擅自换引擎。
 - 引擎已装且完整：走该引擎的无头构建与测试。
-- 引擎未装或损坏：告诉用户缺什么；要么用可立即验证的 Web 原型先交付切片，要么征得同意后安装。**不要把未安装引擎的「应该能跑」写成已完成。**
+- 引擎未装或损坏：**先尝试脚本化补齐**。`node "<skill 目录>/scripts/prepare-engine.mjs" --engine godot --apply` 可下载解压便携引擎并自检；Unity 可静默装 Hub（编辑器安装与许可证需人工/CI 一次）；UE 只做完整性检测。补齐后再走无头构建；确实补不了，用 Web 原型先交付切片，并明确标注哪些引擎命令未验证。
 - 用户没指定引擎：按[引擎路由](references/engine-routing.md)选默认，不要用一串问题拦住开工。
 
 ## 第 1 步：锁定一个可玩的切片
@@ -99,21 +99,38 @@ node "<skill 目录>/scripts/detect-engine.mjs" "<项目或工作目录>"
 
 报告时写清验证到哪一层：静态检查 / 逻辑测试 / 无头运行 / 有画面运行 / 真机。没验证的部分明确标注。
 
-## 第 6 步：打磨与交付
+## 第 6 步：打磨、定平衡、交付
 
 - 手感：输入缓冲、coyote time、屏幕震动、命中停顿、粒子、音效反馈。
+- 平衡：不靠感觉反复试。用[平衡实验室](references/balance-lab.md)跑批量对局：`node scripts/balance-sweep.mjs --url ... --seeds 1-100 --seconds 90 --out balance/base.csv`，看胜率、存活、分数分位与死亡分布，再扫参数。
 - 可用性：重开、暂停、音量、窗口缩放、键位说明、存档。
 - 素材与音频：[素材与音频](references/assets-and-audio.md)。可用 `generate_audio` 生成 TTS、音乐、音效，先 `search_audio_library` 复用。
+- 发布：按[发布自动化](references/publishing-automation.md)，用 `node scripts/publish.mjs --target itch|steam|web|wechat|android|ios`（默认 dry-run，确认后 `--apply`）；版本号绑定 commit，记录回滚路径。
 - 交付：可运行构建加源码加 `README`（怎么跑、怎么改、已验证什么）加后续路线。
 
 ## 反模式
 
 - 为「跨引擎」先写通用引擎或大而全 ECS，再选引擎。
 - 手改 `.uasset`、`.umap` 或 GUID 资产；用文本编辑器拼场景。
+- 依赖 GUI 点击生成资产/关卡（不可重复、CI 跑不了）。
+- 引擎没装就直接说"做不了"，而不先跑 `prepare-engine.mjs` 补齐。
+- 数值平衡靠手动反复试，不跑批量统计。
+- 把发布当纯清单，明明有 butler/steamcmd/CLI 还在手工点上传。
 - 先做菜单、设置、存档、成就，核心循环却不好玩。
 - 用 20GB 素材包代替灰盒验证。
 - 以「代码写完了」代替「跑起来截到图了」。
 - 静默安装引擎或改动用户工程配置。
+
+## 能力边界（v2）
+
+| 之前的"局限" | 现在的做法 | 证据 |
+|---|---|---|
+| 模型/关卡仍需编辑器手动生成 | Blender headless 出模型；UE Python / Unity Editor / Godot tool script 生成场景与预制体；纯数据关卡直接生成 JSON | `templates/blender|ue|unity|godot`，语法与接口按官方 API 编写 |
+| 引擎命令只是"参考"，不能替代已安装引擎 | `prepare-engine.mjs` 可脚本化补齐（Godot 全自动；Unity Hub 静默装，编辑器/许可证一步人工；UE 检测完整性） | 引擎装好后 `detect-engine.mjs` + 各引擎构建命令实测 |
+| 商店发布只能列清单 | `publish.mjs` 统一入口：itch（butler）、Steam（steamcmd）、Web 打包、微信 CLI、Android/iOS 构建；默认 dry-run | `publish.mjs --dry-run` 输出可复现命令 |
+| 手感/数值只能人工迭代 | `balance-sweep.mjs` 批量种子对局 + CSV + 胜率/分位统计；参数扫描 | 对模板跑 20 seed 得到基线 |
+
+仍然"不能"的只有：绕过平台审核、免登录发布、无引擎二进制凭空构建。这三件事没有任何工具能自动化。
 
 ## 参考文件
 
@@ -130,6 +147,9 @@ node "<skill 目录>/scripts/detect-engine.mjs" "<项目或工作目录>"
 | [code-first.md](references/code-first.md) | Bevy、MonoGame、LÖVE、pygame、Raylib、LibGDX、HaxeFlixel |
 | [verification.md](references/verification.md) | 无头矩阵、截图配方、状态探针、故障排查、诚实协议 |
 | [assets-and-audio.md](references/assets-and-audio.md) | 占位美术、授权、音频生成与混音、导入设置 |
+| [asset-pipeline.md](references/asset-pipeline.md) | Blender headless、UE Python、Unity Editor、Godot tool script 生成模型/关卡/预制体；纯数据关卡；导入验证 |
+| [publishing-automation.md](references/publishing-automation.md) | butler、steamcmd/SteamPipe、Web 托管、微信/抖音 CLI、Android/iOS CI、回滚与密钥管理 |
+| [balance-lab.md](references/balance-lab.md) | 批量种子对局、指标解读、参数扫描、机器人策略、手感测试、防过拟合 |
 | [platform-targets.md](references/platform-targets.md) | Windows/macOS/Web/移动/Steam/小游戏/Roblox 打包与限制 |
 
-模板：[web-canvas](templates/web-canvas/) 是可运行的最小 2D 游戏骨架（固定步长、输入、状态探针、存档、音效），复制后替换玩法即可。
+模板：[web-canvas](templates/web-canvas/) 是可运行的最小 2D 游戏骨架（固定步长、输入、状态探针、存档、音效），复制后替换玩法即可。资产生成模板：[blender/gen_props.py](templates/blender/gen_props.py)、[ue/gen_assets.py](templates/ue/gen_assets.py)、[unity/Editor/BuildTools.cs](templates/unity/Editor/BuildTools.cs)、[godot/tools/gen_content.gd](templates/godot/tools/gen_content.gd)。

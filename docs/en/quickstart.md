@@ -154,7 +154,43 @@ Do not fabricate engine build output. A "cannot build: engine missing" line is a
 | `unknown key code` | key name not in KEYMAP | use `KeyA`–`KeyZ` / `Digit0`–`Digit9` / `Arrow*` / `Space` / `Enter` / `Escape` |
 | Exit 1 with only favicon 404 | browser default noise | add `--ignore "favicon"`, or leave the default filter on |
 
-## 10. Next steps
+## 10. Content, balance and publishing automation
+
+**Bootstrap the engine instead of giving up.**
+
+```bash
+node scripts/prepare-engine.mjs --engine godot            # dry-run: shows download URL
+node scripts/prepare-engine.mjs --engine godot --apply    # downloads, unzips, self-tests
+node scripts/prepare-engine.mjs --engine unreal           # integrity check (Binaries/Win64)
+node scripts/prepare-engine.mjs --engine unity            # silent Unity Hub install
+```
+
+**Generate content with scripts, not by hand.** `templates/blender/gen_props.py` (headless GLB/FBX),
+`templates/ue/gen_assets.py` (UE editor Python: import, spawn, save level), `templates/unity/Editor/BuildTools.cs`
+(`-executeMethod` mesh/prefab/scene), `templates/godot/tools/gen_content.gd` (`ArrayMesh` → `.tres`/`.tscn`).
+
+**Measure balance over many seeds.**
+
+```bash
+node scripts/balance-sweep.mjs --url http://127.0.0.1:8123 --seeds 1-100 --seconds 90 --out sweep.csv
+node scripts/balance-sweep.mjs --core dist/core.mjs --seeds 1-500 --seconds 120 --json
+```
+
+Summary reports `win_rate`, `ended_rate`, `mean_survival_s` and score `p50/p90/max`. Read
+`references/balance-lab.md` for target ranges and the bot-policy approach.
+
+**Publish from one entry point.**
+
+```bash
+node scripts/publish.mjs --target itch --build dist --user <user> --game <game>          # dry-run
+node scripts/publish.mjs --target steam --app <id> --depot <id> --build dist --apply     # steamcmd
+node scripts/publish.mjs --target web --build dist --apply                               # zip + deploy
+```
+
+Secrets come from env vars and are redacted in logs; `--apply` is always explicit. See
+`references/publishing-automation.md` for SteamPipe VDF, WeChat, Android/iOS and console limits.
+
+## 11. Next steps
 
 - Read `SKILL.md` for the full workflow and anti-patterns.
 - Read `references/engine-routing.md` before choosing an engine.

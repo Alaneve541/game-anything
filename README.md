@@ -24,8 +24,10 @@ tools so the bar is checkable, not aspirational.
 Four hard rules the skill enforces:
 
 1. **Runnable beats complete.** A 5-minute playable slice first, features second.
-2. **Never hand-write binary engine assets** (`.uasset`, `.umap`, `.unity`, `.meta`, `.prefab`).
-   Generate them through engine APIs or edit text formats only.
+2. **Generate assets through tools and engine APIs — never hand-write binary bytes.** Models come
+   from Blender headless or procedural meshes; levels, prefabs and scenes come from UE Python /
+   Unity Editor scripts / Godot tool scripts or from JSON level data. `.uasset`, `.umap`, `.unity`
+   and `.yy` files are never touched by a text editor.
 3. **Only report what was verified.** No "should work" claims in the final report.
 4. **Feel first, visuals second.** Input latency, feedback, and pacing before art polish.
 
@@ -90,6 +92,9 @@ Expected: exit code `0`, `errors 0`, a `state` JSON line showing the player move
 | `scripts/detect-engine.mjs` | Scans a project directory and the machine: engine scores, install health (e.g. Unreal missing `Engine/Binaries/Win64`), toolchain (Node, .NET, browsers) and next-step suggestions. |
 | `scripts/verify-web.mjs` | Headless Edge/Chrome over the DevTools protocol: waits for a probe, collects console/page errors, injects keys/clicks, evaluates JS, screenshots, exits non-zero on errors. |
 | `scripts/serve.mjs` | Zero-dependency static file server (MIME table, directory-traversal protection, SPA fallback). |
+| `scripts/prepare-engine.mjs` | Bootstraps engines so the commands actually run: Godot is downloaded, unzipped and self-tested (`--headless --version`); Unity Hub is installed silently (editor + license remain one manual/CI step); Unreal is checked for a complete `Engine/Binaries/Win64`. Dry-run by default, `--apply` to install. |
+| `scripts/balance-sweep.mjs` | Runs batches of seeded matches headlessly (browser probe or a DOM-free core module), writes CSV, reports win rate, mean survival and score percentiles — so balance is measured, not guessed. |
+| `scripts/publish.mjs` | One publishing entry point: itch.io (`butler`), Steam (`steamcmd` + SteamPipe VDF), web zip/deploy, WeChat mini-game CLI, Gradle/Fastlane, Xcode archive. Dry-run by default; `--apply` executes; secrets are read from env and redacted in logs. |
 
 `verify-web.mjs` flags worth knowing:
 
@@ -120,27 +125,47 @@ window.__game = {
 | Code-first recipes | Bevy, MonoGame, LÖVE, pygame, Raylib, LibGDX, HaxeFlixel, Ebitengine | Minimal runnable code per engine, no editor needed |
 | No automation | Construct 3 | Manual `.c3p` export; no scriptable CLI |
 
-If the target engine is missing, the skill degrades deliberately: web prototype for feel, pure-logic
-core with deterministic tests, migration plan — rather than pretending a build succeeded.
+If the target engine is missing, the skill does not stop at "install it yourself": `prepare-engine.mjs`
+bootstraps Godot fully automatically (portable zip), installs Unity Hub silently, and reports exactly
+which Unreal binaries are missing. Only after that does it fall back to a web prototype plus a
+migration plan — and it never claims an engine build succeeded when it did not.
+
+## Content and balance are scripted too
+
+- `templates/blender/gen_props.py` — headless Blender: builds props, materials, exports GLB/FBX.
+- `templates/ue/gen_assets.py` — UE editor Python: imports models, spawns actors, saves a level.
+- `templates/unity/Editor/BuildTools.cs` — Unity `-executeMethod`: procedural mesh, prefab, scene.
+- `templates/godot/tools/gen_content.gd` — Godot tool script: `ArrayMesh` → `.tres`, `.tscn` scene.
+- `node scripts/balance-sweep.mjs --url http://127.0.0.1:8123 --seeds 1-100 --seconds 90` —
+  batch runs, CSV, win-rate/survival/percentile summary; `--core dist/core.mjs` for faster sweeps.
 
 ## Repository layout
 
 ```
 SKILL.md                # the skill body the agent loads (Chinese, canonical)
-references/             # 12 deep-dive docs: engines, architecture, verification, assets, shipping
-scripts/                # detect-engine.mjs, verify-web.mjs, serve.mjs
+references/             # 15 deep-dive docs: engines, architecture, asset pipeline, balance lab,
+                        # verification, publishing automation, assets & audio, shipping
+scripts/                # detect-engine, prepare-engine, verify-web, balance-sweep, publish, serve
 templates/web-canvas/   # runnable Canvas game with probe, save, audio
+templates/blender/      # headless Blender prop generator (GLB/FBX)
+templates/ue/           # Unreal editor Python asset + level generator
+templates/unity/        # Unity editor batch content generator
+templates/godot/        # Godot tool script content generator
 docs/en/quickstart.md   # English walkthrough
 docs/assets/            # screenshots
 ```
 
-## Limitations
+## Automation coverage (what used to be a limitation)
 
-- Binary engine assets are never authored by hand; some content (models, levels) still needs an
-  engine editor or API-generated build.
-- Engine-specific commands are verified references, not substitutes for an installed engine.
-- Store submission is a checklist, not automation (Steam/itch/WeChat store consoles stay manual).
-- Game feel and balance need iteration; the skill guarantees a runnable, verifiable baseline.
+| Area | How it is automated now | What still needs a human |
+|---|---|---|
+| Models / levels / prefabs | Blender headless; UE Python, Unity Editor, Godot tool scripts; JSON level data | Art direction choices |
+| Engine setup | `prepare-engine.mjs`: Godot fully automated; Unity Hub silent install; Unreal integrity check | Unity license activation; Unreal's 30–80 GB installer |
+| Publishing | `publish.mjs`: butler, steamcmd, web zip/deploy, WeChat CLI, Gradle/Fastlane, Xcode archive | First login, 2FA, store review submission |
+| Balance & feel | `balance-sweep.mjs`: seeded batch runs, CSV, win rate / survival / score percentiles | Final subjective polish |
+
+The only genuinely non-automatable parts are platform review, account login/2FA, and building without
+an installed engine binary. Everything else is a command.
 
 ## License
 
